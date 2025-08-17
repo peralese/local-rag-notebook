@@ -27,10 +27,15 @@ class VectorStore:
         )
 
     def add(self, ids, documents, metadatas=None):
-        self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
 
     def count(self):
         return self.collection.count()
 
-    def query(self, text, k=5):
-        return self.collection.query(query_texts=[text], n_results=k)
+    def query(self, text, k=5, include=None):
+        # Only allow include keys Chroma 0.5.x accepts
+        allowed = {"documents", "embeddings", "metadatas", "distances", "uris", "data"}
+        include = include or ["documents", "metadatas", "distances"]  # (ids are returned anyway)
+        include = [x for x in include if x in allowed]
+        return self.collection.query(query_texts=[text], n_results=k, include=include)
+

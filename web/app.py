@@ -1,11 +1,11 @@
 # app.py
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-import os, os.path
+import os, os.path, re
 from vectorstore import VectorStore
 from ingest import ingest_file
 
-app = FastAPI(title="Local RAG (fastembed + Chroma)", version="0.1.0")
+app = FastAPI(title="Local RAG (fastembed + Chroma)", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,7 +13,6 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"],
 )
 
-# Single shared VectorStore instance
 VS = VectorStore()
 
 @app.get("/health")
@@ -51,6 +50,46 @@ def ingest_one(path: str):
     return {"result": res, "count": VS.count()}
 
 @app.get("/query")
-def query(q: str = Query(..., description="Your question"), k: int = 5):
-    out = VS.query(q, k=k)
-    return out
+def query(q: str, k: int = 5, include_embeddings: bool = False):
+    include = ["documents", "metadatas", "distances"]
+    if include_embeddings:
+        include.append("embeddings")
+    return VS.query(q, k=k, include=include)
+
+def _extract_answer(text: str, query: str) -> str:
+    m = re.search(r'code[^\n:]*:\s*([\w\-]+)', text, flags=re.I)
+    if m:
+        return m.group(1)
+    import re as _re
+    sents = _re.split(r'(?<=[.!?])\s+', text.strip())
+    q_terms = {w.lower() for w in _re.findall(r"[\w\-]+", query) if len(w) > 2}
+    best = ""
+    best_score = -1
+    for s in sents:
+        terms = {w.lower() for w in _re.findall(r"[\w\-]+", s)}
+        score = len(q_terms & terms)
+        if score > best_score:
+            best_score = score
+            best = s
+    return best
+
+@app.get("/answer")
+def answer(q: str, k: int = 5):
+    res = VS.query(q, k=k, include=["documents", "metadatas", "distances"])
+    # IDs still come back in res["ids"] even though not in include
+    docs = res.get("documents") or []
+    if not docs or not docs[0]:
+        return {"answer": "", "evidence": [], "note": "no hits"}
+    top_text = docs[0][0]
+    ans = _extract_answer(top_text, q)
+    return {
+        "answer": ans,
+        "evidence": [
+            {
+                "id": (res.get("ids") or [[None]])[0][0],
+                "distance": (res.get("distances") or [[None]])[0][0],
+                "metadata": (res.get("metadatas") or [[{}]])[0][0],
+                "snippet": top_text[:400],
+            }
+        ],
+    }

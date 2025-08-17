@@ -24,7 +24,7 @@ if BACKEND == "ollama":
                 elif isinstance(data.get("embeddings"), list) and data["embeddings"]:
                     out.append(data["embeddings"][0])
                 else:
-                    out.append([0.0]*384)  # safe fallback
+                    out.append([0.0]*384)
             return out
 
     EmbeddingFunction = OllamaEmbeddingFunction
