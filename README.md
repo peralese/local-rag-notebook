@@ -1,4 +1,4 @@
-bb# local-rag-notebook
+# local-rag-notebook
 Local, LLM-optional “NotebookLM-style” search and question-answering over your own documents.
 **Phase 0** focuses on: ingestion, hybrid retrieval (BM25 + dense embeddings) with RRF fusion, and extractive answers with citations *(File, Heading, Page)* via a simple CLI.
 
