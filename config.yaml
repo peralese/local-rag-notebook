@@ -1,0 +1,22 @@
+app:
+  data_dir: ./data
+  index_dir: ./index_store
+
+models:
+  embedding: sentence-transformers/all-MiniLM-L6-v2  # 384-dim, CPU-friendly
+
+ingest:
+  chunk_tokens: 700
+  overlap_tokens: 90
+  ocr: auto  # not used with PyPDF; placeholder for future
+
+retrieval:
+  top_k_lexical: 40
+  top_k_dense: 40
+  rrf_k: 60
+  neighborhood: 1
+
+synthesis:
+  enabled: false
+  provider: ollama
+  model: llama3.2:3b-instruct

@@ -1,53 +1,10 @@
-# Python
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg-info/
-.eggs/
-.venv/
-venv/
-env/
-.env
-.venv*/
-
-# Caches
-.cache/
-.mypy_cache/
 .pytest_cache/
-pip-wheel-metadata/
-
-# Coverage / test output
-.coverage
-coverage.xml
-htmlcov/
-
-# Logs
+.venv/
+.env
+*.pyc
+data/
+index_store/
 logs/
-*.log
-
-# OS / Editor
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
-*.code-workspace
-
-# Data & indexes (persisted locally)
-data/
-!data/uploads/
-!data/uploads/.gitkeep
-!data/README.md
-
-# Chroma internal artifacts (if created outside /data)
-chroma/
-*.chromadb
-
-# Docker & compose overrides
-docker-compose.override.yml
-.docker/
-
-# Misc
-*.sqlite*
-*.db
