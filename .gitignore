@@ -1,10 +1,70 @@
+# ---- Python ----
 __pycache__/
-.pytest_cache/
+*.py[cod]
+*$py.class
+
+# Native / compiled extensions
+*.so
+*.dylib
+*.dll
+
+# ---- Virtual Environments ----
 .venv/
-.env
-*.pyc
-data/
+venv/
+env/
+ENV/
+*.venv
+*.env
+.python-version
+
+# ---- Packaging / Build ----
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# ---- Tests / Coverage ----
+.tox/
+.nox/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# ---- Type-check / Linters ----
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# ---- Editors / IDEs ----
+.vscode/
+.idea/
+*.code-workspace
+
+# ---- Project Artifacts (generated) ----
 index_store/
 logs/
+outputs/
+# Uncomment if you don't want to commit your source documents
+# data/
+
+# Optional: ignore large local archives
+# *.zip
+# *.7z
+# *.tar
+# *.tar.gz
+
+# ---- Local Config Overrides ----
+config.local.yaml
+*.secret.yaml
+*.secrets.yaml
+
+# ---- OS junk ----
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# ---- Jupyter ----
+.ipynb_checkpoints/

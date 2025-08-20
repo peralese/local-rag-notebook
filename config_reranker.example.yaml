@@ -1,0 +1,8 @@
+
+# Append this 'reranker' section under 'retrieval' in your config.yaml.
+retrieval:
+  reranker:
+    enabled: true
+    model: BAAI/bge-reranker-base
+    top_k_to_rerank: 50
+    final_k: 8

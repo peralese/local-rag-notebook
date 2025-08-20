@@ -1,82 +1,57 @@
+
+from __future__ import annotations
+from typing import List, Tuple, Union
 import re
-from typing import List, Tuple
-from .classify import classify
 from ..index.schema import Chunk
 
-BULLET_RE = re.compile(r'^\s*[-*]\s+(.*)')
+def _dehyphenate(text: str) -> str:
+    return re.sub(r'(\w)-\n(\w)', r'\1\2', text)
 
-def _sentences(text: str) -> list[str]:
-    return re.split(r'(?<=[.!?])\s+', text.strip())
+def _format_heading(hp: Union[str, List[str], None]) -> str:
+    if not hp:
+        return ""
+    if isinstance(hp, (list, tuple)):
+        parts = [str(h) for h in hp if h]
+        return " > ".join(parts)
+    return str(hp)
 
-def _window_around_query(text: str, query: str, width: int = 2) -> str:
-    sents = _sentences(text)
-    toks = [t for t in re.findall(r"[A-Za-z0-9]+", query.lower()) if len(t) > 2]
-    hit_idx = None
-    for i, s in enumerate(sents):
-        sl = s.lower()
-        if any(t in sl for t in toks):
-            hit_idx = i
+def extract_answer(
+    question: str,
+    contexts: List[Chunk],
+    max_chars: int = 1500,
+    join_with: str = "\n\n",
+    include_headings: bool = True,
+    dehyphenate: bool = True,
+) -> Tuple[str, List[Chunk]]:
+    pieces: List[str] = []
+    used: List[Chunk] = []
+    for ch in contexts:
+        txt = ch.text or ""
+        if dehyphenate:
+            txt = _dehyphenate(txt)
+
+        if include_headings:
+            heading = _format_heading(getattr(ch, "heading_path", None))
+            if heading:
+                txt = f"{heading}:\n{txt}"
+
+        txt = re.sub(r"[ \t]+", " ", txt)
+        txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
+        if not txt:
+            continue
+
+        budget = max_chars - sum(len(p) for p in pieces) - (len(join_with) if pieces else 0)
+        if budget <= 0:
             break
-    if hit_idx is None:
-        return " ".join(sents[: min(3, len(sents))])
-    lo = max(0, hit_idx - width)
-    hi = min(len(sents), hit_idx + width + 1)
-    return " ".join(sents[lo:hi])
 
-def _extract_bullets(text: str, max_items: int = 10) -> List[str]:
-    bullets = []
-    for ln in text.splitlines():
-        m = BULLET_RE.match(ln)
-        if m:
-            item = m.group(1).strip()
-            if item and item not in bullets:
-                bullets.append(item)
-                if len(bullets) >= max_items:
-                    break
-    return bullets
+        if len(txt) > budget:
+            txt = txt[:budget].rstrip()
 
-def extract_answer(query: str, contexts: List[Chunk]) -> Tuple[str, List[Chunk]]:
-    mode = classify(query)
-    used = []
-    if not contexts:
-        return "No matching content found.", used
+        pieces.append(txt)
+        used.append(ch)
 
-    if mode == "list":
-        # Try to pull real bullets from top contexts
-        agg = []
-        for ch in contexts:
-            bullets = _extract_bullets(ch.text, max_items=10)
-            if not bullets:
-                # fallback to sentence window
-                bullets = [_window_around_query(ch.text, query, width=1)]
-            for b in bullets:
-                if b not in agg:
-                    agg.append(b)
-            used.append(ch)
-            if len(agg) >= 10:
-                break
-        answer = "Here are relevant items:\n" + "\n".join(f"- {b}" for b in agg[:10])
-        return answer, used
+        if sum(len(p) for p in pieces) >= max_chars:
+            break
 
-    if mode == "compare":
-        parts = []
-        for i, ch in enumerate(contexts[:4], start=1):
-            snippet = _window_around_query(ch.text, query, width=1)
-            parts.append(f"[{i}] {snippet}")
-            used.append(ch)
-        answer = "Comparison contexts:\n" + "\n".join(parts)
-        return answer, used
-
-    if mode == "compute":
-        parts = []
-        for i, ch in enumerate(contexts[:6], start=1):
-            snippet = _window_around_query(ch.text, query, width=1)
-            parts.append(f"[{i}] {snippet}")
-            used.append(ch)
-        answer = "Relevant data for computation:\n" + "\n".join(parts)
-        return answer, used
-
-    best = contexts[0]
-    snippet = _window_around_query(best.text, query, width=2)
-    used.append(best)
-    return snippet, used
+    answer = join_with.join(pieces).strip()
+    return answer, used

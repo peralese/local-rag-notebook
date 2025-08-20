@@ -15,8 +15,15 @@ retrieval:
   top_k_dense: 40
   rrf_k: 60
   neighborhood: 1
+  reranker:
+    enabled: true
+    model: BAAI/bge-reranker-base
+    top_k_to_rerank: 50
+    final_k: 8
 
 synthesis:
   enabled: false
   provider: ollama
   model: llama3.2:3b-instruct
+
+  
