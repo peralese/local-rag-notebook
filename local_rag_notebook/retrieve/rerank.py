@@ -1,7 +1,10 @@
 
 from __future__ import annotations
+
 from typing import List, Optional, Tuple
+
 from ..index.schema import Chunk
+
 
 class Reranker:
     """

@@ -1,5 +1,6 @@
-from pathlib import Path
 import json
+from pathlib import Path
+
 
 class Logger:
     def __init__(self, path: Path):

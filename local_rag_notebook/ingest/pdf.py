@@ -1,7 +1,10 @@
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
+
 from pypdf import PdfReader
+
 from .clean import normalize_text
+
 
 def parse_pdf(path: Path) -> List[Dict]:
     reader = PdfReader(str(path))

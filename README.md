@@ -8,6 +8,7 @@ This repo now includes **Phase 1 / 1.1 / 1.2** upgrades:
 - **File outputs** (JSON/Markdown/TXT/HTML) via `--out` / `--save` / `--format`.
 - Small fixes (heading path rendering, page-range filter for debugging).
 - **Phase 2 warm-up and keep-alive support** for Ollama (avoids cold-start timeouts).
+- **DX improvements (Sept 2025):** Makefile, `pyproject.toml`, `requirements-dev.txt`, `.env.example`, and a test scaffold for smoother development.
 
 ---
 
@@ -21,15 +22,18 @@ This repo now includes **Phase 1 / 1.1 / 1.2** upgrades:
 - **Target by file** with `--files` (substring match).
 - **LLM warm-up**: on first `query` run, a lightweight warm-up call is made to pre-load the Ollama model.
 - **Keep-alive flag**: models stay loaded on the Ollama server (`--keep-alive 30m`) so subsequent queries are fast.
+- **DX tooling**: `make env`, `make lint`, `make fmt`, `make test`, `make run`.
 
 ---
 
 ## 📦 Requirements
-- Python **3.11+** recommended (Windows/macOS/Linux). Works on **Windows + Python 3.13** with minor notes (below).
+- Python **3.11+** recommended (works on **Windows + Python 3.13** with minor notes).
 - No GPU required.
 - Disk: a few hundred MB for embeddings & indexes at small scale.
 
 **Runtime deps (core)**: `sentence-transformers`, `rank-bm25`, `numpy`, `pypdf`, `pyyaml`, `tqdm`, `pydantic`, `requests`
+
+**Dev deps (new)**: `ruff`, `black`, `isort`, `pytest`, `python-dotenv`
 
 ---
 
@@ -39,9 +43,10 @@ This repo now includes **Phase 1 / 1.1 / 1.2** upgrades:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1  # (macOS/Linux: source .venv/bin/activate)
 
-# 2) Install
+# 2) Install runtime + dev deps
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 # 3) Put docs in ./data  (PDF / MD / TXT / CSV / TSV)
 # 4) Build indexes
@@ -51,7 +56,6 @@ python cli.py ingest .\data
 ---
 
 ## 🔎 Query (CLI)
-
 Now supports **new retrieval/rerank controls** (added recently) **plus warm-up/keep-alive**:
 - `--recall-topk N` — control the number of passages recalled before rerank.
 - `--rerank-topk N` — control the number of passages kept after rerank.
@@ -139,6 +143,33 @@ python cli.py query "List the prerequisites" --out outputs/prereqs.md
 
 ## 🧹 Maintenance scripts
 *(unchanged — see existing doc)*
+
+---
+
+## 🛠️ Developer Experience (new)
+We’ve added tooling for easier development:
+
+- **Makefile**  
+  - `make env` — create venv + install runtime + dev deps  
+  - `make lint` — run ruff  
+  - `make fmt` — run black + isort  
+  - `make test` — run pytest  
+  - `make run ARGS='query "hello" ...'` — pass args to CLI  
+  - `make clean` — remove caches  
+
+- **pyproject.toml** — config for ruff, black, isort, pytest, coverage.  
+- **requirements-dev.txt** — pins dev tools.  
+- **.env.example** — documents environment variables (`OLLAMA_HOST`, `OLLAMA_MODEL`, etc.).  
+- **tests/** — includes a basic smoke test to validate imports.  
+
+### Developer workflow
+```powershell
+make env
+make lint
+make fmt
+make test
+make run ARGS='query "hello" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435'
+```
 
 ---
 

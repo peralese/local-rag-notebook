@@ -2,12 +2,18 @@
 import argparse
 from pathlib import Path
 from statistics import mean
+
 import requests  # <-- added for warm-up HTTP call
 
-from local_rag_notebook.app import ingest_path, query_text, load_config
-from local_rag_notebook.utils.output import write_output, infer_format  # infer_format kept for compatibility
+from local_rag_notebook.app import ingest_path, load_config, query_text
+from local_rag_notebook.utils.output import (  # infer_format kept for compatibility
+    infer_format,
+    write_output,
+)
+
 # Phase 2 (local-only synthesis)
 from synthesizer import synthesize_answer
+
 # NOTE: We no longer instantiate OllamaLLM here for warm-up; we do a direct HTTP warm-up instead.
 # from llm.ollama import OllamaLLM
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
+
+from typing import List, Optional
+
 from pydantic import BaseModel
-from typing import Optional, List
+
 
 class Chunk(BaseModel):
     doc_id: str

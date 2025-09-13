@@ -1,8 +1,13 @@
 
 from __future__ import annotations
+
+import datetime
+import html
+import json
+import re
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-import json, datetime, re, html
+from typing import Any, Dict, List, Optional
+
 
 def _timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

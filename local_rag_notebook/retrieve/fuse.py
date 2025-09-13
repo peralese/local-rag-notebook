@@ -1,6 +1,9 @@
 from __future__ import annotations
-from typing import List, Dict
+
+from typing import Dict, List
+
 from ..index.schema import Hit
+
 
 def rrf_merge(bm25_hits: List[Hit], dense_hits: List[Hit], k: int = 60) -> List[Hit]:
     scores: Dict[str, float] = {}

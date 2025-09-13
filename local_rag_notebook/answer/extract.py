@@ -1,8 +1,11 @@
 
 from __future__ import annotations
-from typing import List, Tuple, Union
+
 import re
+from typing import List, Tuple, Union
+
 from ..index.schema import Chunk
+
 
 def _dehyphenate(text: str) -> str:
     return re.sub(r'(\w)-\n(\w)', r'\1\2', text)

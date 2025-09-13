@@ -1,6 +1,9 @@
+from typing import Dict, List
+
 import requests
-from typing import List, Dict
+
 from .base import LLM
+
 
 class OllamaLLM(LLM):
     def __init__(self, model: str = "llama3.1:8b", endpoint: str = "http://localhost:11434"):

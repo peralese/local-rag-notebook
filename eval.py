@@ -1,11 +1,16 @@
 
-import argparse, json, statistics, time
+import argparse
+import json
+import statistics
+import time
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from local_rag_notebook.app import load_config, query_text
-from local_rag_notebook.index.lexical import LexicalIndexer
 from local_rag_notebook.index.dense import DenseIndexer
+from local_rag_notebook.index.lexical import LexicalIndexer
 from local_rag_notebook.retrieve.fuse import rrf_merge
+
 
 def _load_gold(path: Path) -> List[Dict[str, Any]]:
     cases = []

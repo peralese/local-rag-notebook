@@ -1,9 +1,15 @@
 from __future__ import annotations
+
+import json
+import pickle
+import re
 from pathlib import Path
-import json, pickle, re
 from typing import List
+
 from rank_bm25 import BM25Okapi
+
 from .schema import Chunk, Hit
+
 
 def _tok(s: str) -> list[str]:
     return re.findall(r"[A-Za-z0-9]+", s.lower())

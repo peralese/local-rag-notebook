@@ -1,7 +1,9 @@
-from pathlib import Path
 import re
-from typing import List, Dict
+from pathlib import Path
+from typing import Dict, List
+
 from .clean import normalize_text
+
 
 def parse_md_or_txt(path: Path) -> List[Dict]:
     text = path.read_text(encoding="utf-8", errors="ignore")

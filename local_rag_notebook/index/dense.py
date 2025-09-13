@@ -1,9 +1,12 @@
 from __future__ import annotations
-from pathlib import Path
+
 import json
-import numpy as np
+from pathlib import Path
 from typing import List, Optional
+
+import numpy as np
 from sentence_transformers import SentenceTransformer
+
 from .schema import Chunk, Hit
 
 try:

@@ -1,19 +1,20 @@
+import time
+from copy import deepcopy
 from pathlib import Path
 from typing import List, Optional, Tuple
-from copy import deepcopy
-import time
+
 import yaml
 
-from .index.schema import Chunk, Hit
-from .ingest.pdf import parse_pdf
-from .ingest.md_txt import parse_md_or_txt
-from .ingest.csv_tsv import parse_csv_tsv
-from .ingest.normalize import chunk_sections
+from .answer.extract import extract_answer
 from .index.dense import DenseIndexer
 from .index.lexical import LexicalIndexer
-from .retrieve.fuse import rrf_merge, expand_neighbors
+from .index.schema import Chunk, Hit
+from .ingest.csv_tsv import parse_csv_tsv
+from .ingest.md_txt import parse_md_or_txt
+from .ingest.normalize import chunk_sections
+from .ingest.pdf import parse_pdf
+from .retrieve.fuse import expand_neighbors, rrf_merge
 from .retrieve.rerank import Reranker
-from .answer.extract import extract_answer
 from .utils.log import Logger
 
 SUPPORTED = {".pdf", ".md", ".txt", ".csv", ".tsv"}

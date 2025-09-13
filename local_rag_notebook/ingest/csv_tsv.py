@@ -1,6 +1,7 @@
-from pathlib import Path
-from typing import List, Dict
 import csv
+from pathlib import Path
+from typing import Dict, List
+
 
 def parse_csv_tsv(path: Path) -> List[Dict]:
     sep = '\t' if path.suffix.lower() == '.tsv' else ','
