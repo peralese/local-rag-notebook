@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import re
@@ -8,7 +7,8 @@ from ..index.schema import Chunk
 
 
 def _dehyphenate(text: str) -> str:
-    return re.sub(r'(\w)-\n(\w)', r'\1\2', text)
+    return re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+
 
 def _format_heading(hp: Union[str, List[str], None]) -> str:
     if not hp:
@@ -17,6 +17,7 @@ def _format_heading(hp: Union[str, List[str], None]) -> str:
         parts = [str(h) for h in hp if h]
         return " > ".join(parts)
     return str(hp)
+
 
 def extract_answer(
     question: str,

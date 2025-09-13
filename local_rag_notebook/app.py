@@ -53,9 +53,7 @@ def ingest_path(data_dir: Path, cfg: dict):
     chunks: list[Chunk] = []
     for s in sections:
         chunks.extend(
-            chunk_sections(
-                s, cfg["ingest"]["chunk_tokens"], cfg["ingest"]["overlap_tokens"]
-            )
+            chunk_sections(s, cfg["ingest"]["chunk_tokens"], cfg["ingest"]["overlap_tokens"])
         )
 
     meta_path = index_dir / "chunks.jsonl"
@@ -124,7 +122,7 @@ def query_text(
         neigh_radius = int(neighbor_window)
 
     # Reranker defaults
-    rer_cfg = (cfg_run.get("retrieval", {}).get("reranker", {}) or {})
+    rer_cfg = cfg_run.get("retrieval", {}).get("reranker", {}) or {}
     use_reranker_cfg = bool(rer_cfg.get("enabled", False))
     rr_enabled = use_reranker_cfg and not no_rerank
 
@@ -136,7 +134,11 @@ def query_text(
         if rr_topk_to_rerank < rr_final_k:
             rr_topk_to_rerank = rr_final_k
 
-    rr_min_score = float(min_rerank_score) if min_rerank_score is not None else float(rer_cfg.get("min_score", 0.0))
+    rr_min_score = (
+        float(min_rerank_score)
+        if min_rerank_score is not None
+        else float(rer_cfg.get("min_score", 0.0))
+    )
 
     # If '--k' was provided, prefer that as final_k after rerank
     if final_k is not None:
@@ -183,7 +185,7 @@ def query_text(
         rr = Reranker(rr_model)
         if rr.enabled and base_chunks:
             # candidates to rerank
-            candidates = base_chunks[: rr_topk_to_rerank]
+            candidates = base_chunks[:rr_topk_to_rerank]
             # Expect: (ranked_chunks, scores_map_or_list)
             rer_chunks, scores_obj = rr.rerank(question, candidates, top_k=rr_topk_to_rerank)
 
@@ -207,19 +209,19 @@ def query_text(
                 else:
                     filtered = rer_chunks
 
-                chunks = filtered[: rr_final_k] if filtered else rer_chunks[: rr_final_k]
-                reranked_ids = [c.chunk_id for c in rer_chunks[: rr_topk_to_rerank]]
+                chunks = filtered[:rr_final_k] if filtered else rer_chunks[:rr_final_k]
+                reranked_ids = [c.chunk_id for c in rer_chunks[:rr_topk_to_rerank]]
 
             # Safe fallback: if nothing survived, fall back to pre-rerank
             if not chunks:
-                chunks = base_chunks[: rr_final_k]
+                chunks = base_chunks[:rr_final_k]
         else:
-            chunks = base_chunks[: rr_final_k]
+            chunks = base_chunks[:rr_final_k]
         timers["rerank_ms"] = int((time.perf_counter() - t4) * 1000)
     else:
         # No rerank path
         timers["rerank_ms"] = 0
-        chunks = base_chunks[: rr_final_k]
+        chunks = base_chunks[:rr_final_k]
 
     # ---- Answer formatting / extraction
     ans_cfg = cfg_run.get("answer", {}) or {}
@@ -277,7 +279,7 @@ def query_text(
     )
 
     top_k = rr_final_k if isinstance(rr_final_k, int) and rr_final_k > 0 else 8
-    
+
     resp = {
         "answer": answer,
         "citations": citations,
@@ -290,10 +292,11 @@ def query_text(
                 "page": c.page_no,
                 "text": c.text[:1000],
                 # Make score numeric if available; otherwise omit or default
-                "score": (float(getattr(c, "score")) if getattr(c, "score", None) is not None else 0.7),
+                "score": (
+                    float(getattr(c, "score")) if getattr(c, "score", None) is not None else 0.7
+                ),
             }
             for c in chunks[:top_k]
         ],
     }
     return resp
-

@@ -22,6 +22,7 @@ from llm.factory import make_llm  # requires llm/base.py, llm/ollama.py, llm/fac
 CITATION_TAG_RE = re.compile(r"\[C(\d+)\]")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
+
 def _extract_first_json_object(text: str) -> Dict[str, Any]:
     """
     Robustly extract the first top-level JSON object from a string.
@@ -43,16 +44,15 @@ def _extract_first_json_object(text: str) -> Dict[str, Any]:
     # If we get here, braces were unbalanced
     raise ValueError("Unbalanced JSON braces in model output.")
 
+
 def _json_loads_strict(txt: str) -> Dict[str, Any]:
     try:
         return json.loads(txt)
     except Exception:
         return _extract_first_json_object(txt)
 
-def pack_context(
-    chunks: List[Dict[str, Any]],
-    max_chars: int = 24_000
-) -> List[Dict[str, str]]:
+
+def pack_context(chunks: List[Dict[str, Any]], max_chars: int = 24_000) -> List[Dict[str, str]]:
     """
     Packs retrieved chunks into a compact list for prompting.
     Each packed item gets an ID C1, C2, ...
@@ -76,6 +76,7 @@ def pack_context(
         out.append(item)
         used += add
     return out
+
 
 def build_messages(query: str, packed: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
@@ -110,6 +111,7 @@ RESPONSE JSON SCHEMA:
         {"role": "user", "content": user},
     ]
 
+
 def validate_citations(parsed: Dict[str, Any], strict: bool) -> Tuple[bool, str]:
     ans = (parsed.get("answer_markdown") or "").strip()
     cits = parsed.get("citations") or []
@@ -127,6 +129,7 @@ def validate_citations(parsed: Dict[str, Any], strict: bool) -> Tuple[bool, str]
                 return False, "strict mode: found a sentence without a citation tag"
     return True, ""
 
+
 def decide_abstain(parsed: Dict[str, Any], avg_sim: float, threshold: float) -> Tuple[bool, str]:
     cov = float(parsed.get("support_coverage") or 0.0)
     blended = 0.5 * cov + 0.5 * max(0.0, min(1.0, float(avg_sim or 0.0)))
@@ -135,6 +138,7 @@ def decide_abstain(parsed: Dict[str, Any], avg_sim: float, threshold: float) -> 
     if parsed.get("abstain", False):
         return True, parsed.get("why", "model abstained")
     return False, ""
+
 
 def _call_local_llm(
     messages: List[Dict[str, str]],
@@ -151,9 +155,11 @@ def _call_local_llm(
     raw = llm.chat_json(messages, temperature=temperature, max_tokens=max_tokens)
     return _json_loads_strict(raw)
 
+
 # ---------------------------
 # Public entry point
 # ---------------------------
+
 
 def synthesize_answer(
     query: str,
@@ -192,7 +198,11 @@ def synthesize_answer(
 
     ok, reason = validate_citations(parsed, strict=strict_citations)
     if not ok:
-        return {"abstain": True, "why": f"citation validation failed: {reason}", "snippets": packed[:3]}
+        return {
+            "abstain": True,
+            "why": f"citation validation failed: {reason}",
+            "snippets": packed[:3],
+        }
 
     # Trim citations to top-N unique by id, preserving order
     if cite_n and parsed.get("citations"):

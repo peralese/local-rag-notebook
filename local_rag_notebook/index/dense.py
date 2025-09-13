@@ -14,6 +14,7 @@ try:
 except Exception:
     faiss = None  # noqa: F401
 
+
 class DenseIndexer:
     def __init__(self, index_dir: Path, model_name: str):
         self.index_dir = Path(index_dir)
@@ -34,7 +35,9 @@ class DenseIndexer:
         self.chunk_id_order = [c.chunk_id for c in chunks]
         X = self._embed(texts)  # [N, D]
         np.save(self.index_dir / "embeddings.npy", X)
-        (self.index_dir / "chunk_ids.json").write_text(json.dumps(self.chunk_id_order), encoding="utf-8")
+        (self.index_dir / "chunk_ids.json").write_text(
+            json.dumps(self.chunk_id_order), encoding="utf-8"
+        )
 
         if faiss is not None:
             dim = X.shape[1]
@@ -43,7 +46,9 @@ class DenseIndexer:
             faiss.write_index(index, str(self.index_dir / "faiss.index"))
 
     def load(self) -> "DenseIndexer":
-        self.chunk_id_order = json.loads((self.index_dir / "chunk_ids.json").read_text(encoding="utf-8"))
+        self.chunk_id_order = json.loads(
+            (self.index_dir / "chunk_ids.json").read_text(encoding="utf-8")
+        )
         if faiss is not None and (self.index_dir / "faiss.index").exists():
             self.faiss = faiss.read_index(str(self.index_dir / "faiss.index"))
             self._emb_matrix = None

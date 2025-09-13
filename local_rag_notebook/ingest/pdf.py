@@ -15,11 +15,13 @@ def parse_pdf(path: Path) -> List[Dict]:
         except Exception:
             txt = ""
         txt = normalize_text(txt)
-        sections.append({
-            "doc_id": str(path),
-            "heading_path": f"{path.name} > Page {i}",
-            "page_no": i,
-            "text": txt,
-            "meta": {"file_path": str(path)}
-        })
+        sections.append(
+            {
+                "doc_id": str(path),
+                "heading_path": f"{path.name} > Page {i}",
+                "page_no": i,
+                "text": txt,
+                "meta": {"file_path": str(path)},
+            }
+        )
     return sections

@@ -14,6 +14,7 @@ from .schema import Chunk, Hit
 def _tok(s: str) -> list[str]:
     return re.findall(r"[A-Za-z0-9]+", s.lower())
 
+
 class LexicalIndexer:
     def __init__(self, index_dir: Path):
         self.index_dir = Path(index_dir)
@@ -27,7 +28,9 @@ class LexicalIndexer:
         bm25 = BM25Okapi(docs)
         with open(self.index_dir / "bm25.pkl", "wb") as f:
             pickle.dump(bm25, f)
-        (self.index_dir / "chunk_ids_lex.json").write_text(json.dumps(self.chunk_id_order), encoding="utf-8")
+        (self.index_dir / "chunk_ids_lex.json").write_text(
+            json.dumps(self.chunk_id_order), encoding="utf-8"
+        )
         with open(self.index_dir / "chunks.jsonl", "w", encoding="utf-8") as out:
             for c in chunks:
                 out.write(c.model_dump_json() + "\n")
@@ -35,7 +38,9 @@ class LexicalIndexer:
     def load(self) -> "LexicalIndexer":
         with open(self.index_dir / "bm25.pkl", "rb") as f:
             self.bm25 = pickle.load(f)
-        self.chunk_id_order = json.loads((self.index_dir / "chunk_ids_lex.json").read_text(encoding="utf-8"))
+        self.chunk_id_order = json.loads(
+            (self.index_dir / "chunk_ids_lex.json").read_text(encoding="utf-8")
+        )
         return self
 
     def _ensure_chunk_map(self):
@@ -52,12 +57,14 @@ class LexicalIndexer:
                     data = json.loads(s)
                 except json.JSONDecodeError as e:
                     # Recovery for "trailing characters" or accidental noise:
-                    end = s.rfind('}')
+                    end = s.rfind("}")
                     if end != -1:
                         try:
                             data = json.loads(s[: end + 1])
                         except Exception as e2:
-                            raise RuntimeError(f"Failed to parse JSONL line {i} in {path}: {e2}") from e
+                            raise RuntimeError(
+                                f"Failed to parse JSONL line {i} in {path}: {e2}"
+                            ) from e
                     else:
                         raise RuntimeError(f"Failed to parse JSONL line {i} in {path}: {e}") from e
                 c = Chunk(**data)

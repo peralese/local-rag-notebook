@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime
@@ -12,11 +11,13 @@ from typing import Any, Dict, List, Optional
 def _timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
+
 def _slug(s: str, max_len: int = 60) -> str:
     s = s.strip().lower()
     s = re.sub(r"[^a-z0-9\-\s_]+", "", s)
     s = re.sub(r"[\s_]+", "-", s)
     return s[:max_len].strip("-") or "query"
+
 
 def infer_format(out_path: Optional[str], fmt: Optional[str]) -> str:
     if fmt:
@@ -27,7 +28,10 @@ def infer_format(out_path: Optional[str], fmt: Optional[str]) -> str:
             return "html" if ext in {"html", "htm"} else ext
     return "json"
 
-def ensure_outpath(out_path: Optional[str], fmt: str, save_dir: Optional[str], question: str) -> Path:
+
+def ensure_outpath(
+    out_path: Optional[str], fmt: str, save_dir: Optional[str], question: str
+) -> Path:
     if out_path:
         p = Path(out_path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -37,9 +41,10 @@ def ensure_outpath(out_path: Optional[str], fmt: str, save_dir: Optional[str], q
     fname = f"{_timestamp()}_{_slug(question)}.{ 'html' if fmt=='html' else fmt }"
     return base_dir / fname
 
+
 def as_markdown(ans: Dict[str, Any]) -> str:
-    q = ans.get("question","")
-    answer = ans.get("answer","").strip()
+    q = ans.get("question", "")
+    answer = ans.get("answer", "").strip()
     cites = ans.get("citations", [])
     timers = (ans.get("trace") or {}).get("timers_ms")
     lines: List[str] = []
@@ -50,7 +55,11 @@ def as_markdown(ans: Dict[str, Any]) -> str:
     if cites:
         lines.append("## Citations")
         for c in cites:
-            hp = " > ".join(c.get("heading_path") or []) if isinstance(c.get("heading_path"), list) else (c.get("heading_path") or "")
+            hp = (
+                " > ".join(c.get("heading_path") or [])
+                if isinstance(c.get("heading_path"), list)
+                else (c.get("heading_path") or "")
+            )
             pg = c.get("page_no") or "?"
             lines.append(f"- `{c.get('file')}` | {hp} | Page {pg}")
         lines.append("")
@@ -61,9 +70,10 @@ def as_markdown(ans: Dict[str, Any]) -> str:
         lines.append("```")
     return "\n".join(lines).strip() + "\n"
 
+
 def as_text(ans: Dict[str, Any]) -> str:
-    q = ans.get("question","")
-    answer = ans.get("answer","").strip()
+    q = ans.get("question", "")
+    answer = ans.get("answer", "").strip()
     cites = ans.get("citations", [])
     timers = (ans.get("trace") or {}).get("timers_ms")
     lines: List[str] = []
@@ -74,7 +84,11 @@ def as_text(ans: Dict[str, Any]) -> str:
     if cites:
         lines.append("CITATIONS:")
         for c in cites:
-            hp = " > ".join(c.get("heading_path") or []) if isinstance(c.get("heading_path"), list) else (c.get("heading_path") or "")
+            hp = (
+                " > ".join(c.get("heading_path") or [])
+                if isinstance(c.get("heading_path"), list)
+                else (c.get("heading_path") or "")
+            )
             pg = c.get("page_no") or "?"
             lines.append(f"- {c.get('file')} | {hp} | Page {pg}")
         lines.append("")
@@ -82,15 +96,21 @@ def as_text(ans: Dict[str, Any]) -> str:
         lines.append("TIMERS_MS: " + json.dumps(timers))
     return "\n".join(lines).strip() + "\n"
 
+
 def as_html(ans: Dict[str, Any]) -> str:
-    q = html.escape(ans.get("question",""))
-    answer = html.escape(ans.get("answer","").strip()).replace("\n","<br>")
+    q = html.escape(ans.get("question", ""))
+    answer = html.escape(ans.get("answer", "").strip()).replace("\n", "<br>")
     cites = ans.get("citations", [])
     timers = (ans.get("trace") or {}).get("timers_ms")
-    def esc(x): return html.escape(str(x)) if x is not None else ""
+
+    def esc(x):
+        return html.escape(str(x)) if x is not None else ""
+
     lines: List[str] = []
     lines.append("<!doctype html><html><head><meta charset='utf-8'>")
-    lines.append("<style>body{font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 16px} h1{font-size:1.6rem} code,pre{background:#f6f8fa;padding:2px 4px;border-radius:4px} .cites li{margin:6px 0}</style>")
+    lines.append(
+        "<style>body{font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 16px} h1{font-size:1.6rem} code,pre{background:#f6f8fa;padding:2px 4px;border-radius:4px} .cites li{margin:6px 0}</style>"
+    )
     lines.append("</head><body>")
     lines.append(f"<h1>{q}</h1>")
     if answer:
@@ -113,7 +133,14 @@ def as_html(ans: Dict[str, Any]) -> str:
     lines.append("</body></html>")
     return "\n".join(lines)
 
-def write_output(question: str, payload: Dict[str, Any], out_path: Optional[str] = None, fmt: Optional[str] = None, save_dir: Optional[str] = None) -> Path:
+
+def write_output(
+    question: str,
+    payload: Dict[str, Any],
+    out_path: Optional[str] = None,
+    fmt: Optional[str] = None,
+    save_dir: Optional[str] = None,
+) -> Path:
     fmt2 = infer_format(out_path, fmt)
     target = ensure_outpath(out_path, fmt2, save_dir, question)
     # build a stable object

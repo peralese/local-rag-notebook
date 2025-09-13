@@ -15,6 +15,7 @@ def rrf_merge(bm25_hits: List[Hit], dense_hits: List[Hit], k: int = 60) -> List[
     merged.sort(key=lambda x: x.score, reverse=True)
     return merged
 
+
 def expand_neighbors(ids: List[str], order_list: List[str], radius: int = 1) -> List[str]:
     index_map = {cid: idx for idx, cid in enumerate(order_list)}
     out = []

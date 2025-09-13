@@ -1,4 +1,3 @@
-
 import argparse
 import json
 import statistics
@@ -22,19 +21,27 @@ def _load_gold(path: Path) -> List[Dict[str, Any]]:
             cases.append(json.loads(ln))
     return cases
 
+
 def _match_citation(ch_meta: Dict[str, Any], spec: Dict[str, Any]) -> bool:
     f = ch_meta.get("file_path") or ch_meta.get("file") or ch_meta.get("filePath") or ""
-    p = ch_meta.get("page_no") if "page_no" in ch_meta else ch_meta.get("page") if "page" in ch_meta else None
+    p = (
+        ch_meta.get("page_no")
+        if "page_no" in ch_meta
+        else ch_meta.get("page") if "page" in ch_meta else None
+    )
     ok_file = (spec.get("file_contains") or "").lower() in f.lower()
     if not ok_file:
         return False
     if p is None:
         return True if (spec.get("page_min") is None and spec.get("page_max") is None) else False
-    lo = spec.get("page_min", -10**9)
+    lo = spec.get("page_min", -(10**9))
     hi = spec.get("page_max", 10**9)
     return lo <= int(p) <= hi
 
-def _compute_retrieval_metrics(lex: LexicalIndexer, dense: DenseIndexer, q: str, qk: int, expected: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+def _compute_retrieval_metrics(
+    lex: LexicalIndexer, dense: DenseIndexer, q: str, qk: int, expected: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     bm25_hits = lex.search(q, top_k=qk)
     dense_hits = dense.search(q, top_k=qk)
     fused = rrf_merge(bm25_hits, dense_hits, k=60)
@@ -48,7 +55,10 @@ def _compute_retrieval_metrics(lex: LexicalIndexer, dense: DenseIndexer, q: str,
             break
     return {"hit": rank is not None, "mrr": 0.0 if rank is None else 1.0 / rank}
 
-def _string_checks(answer: str, must_inc: List[str], any_of: List[str], must_not: List[str]) -> Dict[str, Any]:
+
+def _string_checks(
+    answer: str, must_inc: List[str], any_of: List[str], must_not: List[str]
+) -> Dict[str, Any]:
     a = answer.lower()
     ok = True
     reasons = []
@@ -65,6 +75,7 @@ def _string_checks(answer: str, must_inc: List[str], any_of: List[str], must_not
             ok = False
             reasons.append(f"must_not:{s}")
     return {"ok": ok, "reasons": reasons}
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -110,20 +121,22 @@ def main():
         checks = _string_checks(ans["answer"], must_inc, any_of, must_not)
         ans_ok_flags.append(1 if checks["ok"] else 0)
 
-        results.append({
-            "qid": g.get("qid"),
-            "question": q,
-            "retrieval_hit": ret["hit"],
-            "mrr": ret["mrr"],
-            "answer_ok": checks["ok"],
-            "answer_reasons": checks["reasons"],
-            "latency_ms": dt
-        })
+        results.append(
+            {
+                "qid": g.get("qid"),
+                "question": q,
+                "retrieval_hit": ret["hit"],
+                "mrr": ret["mrr"],
+                "answer_ok": checks["ok"],
+                "answer_reasons": checks["reasons"],
+                "latency_ms": dt,
+            }
+        )
 
     recall_at_k = sum(hit_flags) / max(1, len(hit_flags))
     mrr_at_k = sum(mrr_vals) / max(1, len(mrr_vals))
     p50 = statistics.median(latencies) if latencies else 0
-    p95 = (sorted(latencies)[int(0.95 * (len(latencies)-1))] if latencies else 0)
+    p95 = sorted(latencies)[int(0.95 * (len(latencies) - 1))] if latencies else 0
 
     print("=== EVAL SUMMARY ===")
     print(f"Cases: {len(gold)}")
@@ -134,7 +147,10 @@ def main():
     print("\nFailed cases:")
     for r in results:
         if not (r["retrieval_hit"] and r["answer_ok"]):
-            print(f"- {r['qid']}: hit={r['retrieval_hit']} answer_ok={r['answer_ok']} reasons={r['answer_reasons']} (lat {r['latency_ms']} ms)")
+            print(
+                f"- {r['qid']}: hit={r['retrieval_hit']} answer_ok={r['answer_ok']} reasons={r['answer_reasons']} (lat {r['latency_ms']} ms)"
+            )
+
 
 if __name__ == "__main__":
     main()

@@ -10,13 +10,15 @@ class OllamaLLM(LLM):
         self.model = model
         self.url = endpoint.rstrip("/") + "/api/chat"
 
-    def chat_json(self, messages: List[Dict[str, str]], temperature: float = 0.0, max_tokens: int = 1024) -> str:
+    def chat_json(
+        self, messages: List[Dict[str, str]], temperature: float = 0.0, max_tokens: int = 1024
+    ) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
             "options": {"temperature": temperature, "num_predict": max_tokens},
-            "format": "json",     # forces models to return JSON
-            "stream": False,       
+            "format": "json",  # forces models to return JSON
+            "stream": False,
         }
         r = requests.post(self.url, json=payload, timeout=(10, 600))
         r.raise_for_status()
