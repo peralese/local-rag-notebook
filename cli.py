@@ -4,6 +4,8 @@ import logging
 import sys
 from pathlib import Path
 from statistics import mean
+import os
+import re
 
 import requests  # <-- added for warm-up HTTP call
 
@@ -21,6 +23,14 @@ logger = logging.getLogger(__name__)
 
 # NOTE: We no longer instantiate OllamaLLM here for warm-up; we do a direct HTTP warm-up instead.
 # from llm.ollama import OllamaLLM
+
+
+def _normalize_endpoint(ep: str | None) -> str:
+    """CLI --endpoint > OLLAMA_HOST env > default; ensure scheme; strip trailing slash."""
+    cand = (ep or os.getenv("OLLAMA_HOST") or "http://localhost:11434").strip()
+    if not re.match(r"^https?://", cand):
+        cand = "http://" + cand
+    return cand.rstrip("/")
 
 
 def _ensure_localhost(endpoint: str):
@@ -130,8 +140,8 @@ def main():
     )
     p_q.add_argument(
         "--endpoint",
-        default="http://localhost:11434",
-        help="Backend endpoint (localhost only in offline mode)",
+        default=None,  # ← let env var take precedence if flag is omitted
+        help="Backend endpoint. Precedence: --endpoint > OLLAMA_HOST env > http://localhost:11434",
     )
     p_q.add_argument("--model", default="llama3.1:8b", help="Local model name (e.g., llama3.1:8b)")
     p_q.add_argument(
@@ -176,6 +186,11 @@ def main():
         action="store_true",
         help="Require each sentence to include at least one [C#] tag",
     )
+    p_q.add_argument(
+        "--no-warmup",
+        action="store_true",
+        help="Skip Ollama warmup even when using --synthesize",
+    )
 
     args = parser.parse_args()
     cfg = load_config(args.config)
@@ -206,27 +221,28 @@ def main():
             sys.exit(2)
 
     elif args.cmd == "query":
-        # Enforce localhost unless explicitly overridden
+        # Resolve endpoint from CLI/env/default and enforce offline guard if needed
+        endpoint = _normalize_endpoint(args.endpoint)
+        # Only warm up when synthesizing with ollama and not explicitly skipped
+        if getattr(args, "synthesize", False) and args.backend == "ollama" and not getattr(args, "no_warmup", False):
+            logger.info("Warming up Ollama model (once) ...")
+            try:
+                warmup_payload = {
+                    "model": args.model,
+                    "prompt": "ping",
+                    "stream": False,
+                    "keep_alive": args.keep_alive,
+                }
+                r = requests.post(f"{endpoint}/api/generate", json=warmup_payload, timeout=(10, 120))
+                if r.status_code >= 400:
+                    logger.warning("warmup skipped: %s returned HTTP %s", f"{endpoint}/api/generate", r.status_code)
+                else:
+                    logger.debug("warmup ok: %s model=%s", endpoint, args.model)
+            except requests.exceptions.RequestException as e:
+                logger.warning("warmup skipped: cannot reach Ollama at %s (%s)", endpoint, e.__class__.__name__)
+                
         if args.offline and not args.allow_remote:
-            _ensure_localhost(args.endpoint)
-
-        # ---- WARM-UP: direct HTTP hit to Ollama (works regardless of OllamaLLM signature) ----
-        try:
-            warmup_payload = {
-                "model": args.model,
-                "prompt": "warmup",
-                "stream": False,
-                "keep_alive": args.keep_alive,  # keep the model hot
-            }
-            # Shorter read timeout here is fine; this is a tiny request
-            requests.post(
-                f"{args.endpoint}/api/generate",
-                json=warmup_payload,
-                timeout=(10, 120),
-            )
-        except Exception as e:
-            # Non-fatal: continue even if warm-up fails
-            print(f"[warmup skipped: {e}]")
+            _ensure_localhost(endpoint)
 
         # Parse filters and page range
         filters = [s.strip() for s in args.files.split(",")] if args.files else None
@@ -298,7 +314,7 @@ def main():
                 avg_sim=avg_similarity,
                 backend=args.backend,
                 model=args.model,
-                endpoint=args.endpoint,
+                endpoint=endpoint,
                 max_context_chars=args.max_context_chars,
                 cite_n=args.cite_n,
                 abstain_threshold=args.abstain_threshold,
