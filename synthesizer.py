@@ -22,35 +22,68 @@ from llm.factory import make_llm  # requires llm/base.py, llm/ollama.py, llm/fac
 CITATION_TAG_RE = re.compile(r"\[C(\d+)\]")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
+# Strip common wrappers around model JSON (markdown fences, leading junk)
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
+_BOM_RE = re.compile(r"^\ufeff")
 
 def _extract_first_json_object(text: str) -> Dict[str, Any]:
     """
     Robustly extract the first top-level JSON object from a string.
-    Avoids relying on regex recursion; uses a simple brace stack.
+    Tolerates:
+      - Markdown code fences ```json ... ```
+      - Leading/trailing noise before/after the JSON object
+      - Byte Order Mark
+    Raises:
+      ValueError if no well-formed object can be found.
     """
-    start = text.find("{")
+    if not isinstance(text, str):
+        raise ValueError("Model output is not a string")
+
+    # Remove BOM and code fences; keep the rest intact so brace scan still works
+    cleaned = _BOM_RE.sub("", text)
+    cleaned = _CODE_FENCE_RE.sub("", cleaned)
+
+    start = cleaned.find("{")
     if start == -1:
         raise ValueError("No '{' found in model output.")
+
     depth = 0
-    for i in range(start, len(text)):
-        ch = text[i]
+    esc = False
+    in_str = False
+    for i in range(start, len(cleaned)):
+        ch = cleaned[i]
+        # track quoted strings to avoid counting braces inside strings
+        if ch == "\\" and in_str:
+            esc = not esc
+            continue
+        if ch == '"' and not esc:
+            in_str = not in_str
+        esc = False if ch != "\\" else esc
+
+        if in_str:
+            continue
         if ch == "{":
             depth += 1
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                candidate = text[start : i + 1]
-                return json.loads(candidate)
-    # If we get here, braces were unbalanced
+                candidate = cleaned[start : i + 1]
+                try:
+                    return json.loads(candidate)
+                except Exception as e:
+                    raise ValueError(f"JSON parse failed: {e}") from e
+
     raise ValueError("Unbalanced JSON braces in model output.")
 
-
 def _json_loads_strict(txt: str) -> Dict[str, Any]:
+    """
+    Parse STRICT JSON. If the entire string isn't valid JSON, attempt to locate
+    the first complete JSON object within and parse that.
+    """
     try:
-        return json.loads(txt)
+        return json.loads(_CODE_FENCE_RE.sub("", _BOM_RE.sub("", txt)))
     except Exception:
         return _extract_first_json_object(txt)
-
 
 def pack_context(chunks: List[Dict[str, Any]], max_chars: int = 24_000) -> List[Dict[str, str]]:
     """
@@ -76,7 +109,6 @@ def pack_context(chunks: List[Dict[str, Any]], max_chars: int = 24_000) -> List[
         out.append(item)
         used += add
     return out
-
 
 def build_messages(query: str, packed: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
@@ -111,24 +143,32 @@ RESPONSE JSON SCHEMA:
         {"role": "user", "content": user},
     ]
 
+def _sentences(text: str) -> List[str]:
+    return [s.strip() for s in SENT_SPLIT_RE.split(text or "") if s and s.strip()]
 
 def validate_citations(parsed: Dict[str, Any], strict: bool) -> Tuple[bool, str]:
+    """
+    Validates that:
+      1) Every citation tag in the answer exists in the citations array.
+      2) If strict=True, every sentence contains at least one citation tag.
+    Returns (ok, reason). `reason` highlights the first failure succinctly.
+    """
     ans = (parsed.get("answer_markdown") or "").strip()
     cits = parsed.get("citations") or []
     ids = {str(c.get("id")) for c in cits if c.get("id")}
 
     # All tags in answer must be present in citations array
-    tags = {f"C{m}" for m in CITATION_TAG_RE.findall(ans)}
-    if not tags.issubset(ids):
-        return False, "answer contains citation tags not present in citations array"
+    tags_in_text = {f"C{m}" for m in CITATION_TAG_RE.findall(ans)}
+    missing = tags_in_text - ids
+    if missing:
+        return False, f"answer contains citation tags not in citations array: {sorted(missing)}"
 
     if strict and ans:
-        sentences = [s.strip() for s in SENT_SPLIT_RE.split(ans) if s.strip()]
-        for s in sentences:
+        for s in _sentences(ans):
             if not CITATION_TAG_RE.search(s):
-                return False, "strict mode: found a sentence without a citation tag"
+                preview = (s[:80] + "…") if len(s) > 80 else s
+                return False, f"strict mode: sentence lacks citation tag: '{preview}'"
     return True, ""
-
 
 def decide_abstain(parsed: Dict[str, Any], avg_sim: float, threshold: float) -> Tuple[bool, str]:
     cov = float(parsed.get("support_coverage") or 0.0)
@@ -138,7 +178,6 @@ def decide_abstain(parsed: Dict[str, Any], avg_sim: float, threshold: float) -> 
     if parsed.get("abstain", False):
         return True, parsed.get("why", "model abstained")
     return False, ""
-
 
 def _call_local_llm(
     messages: List[Dict[str, str]],
@@ -155,11 +194,9 @@ def _call_local_llm(
     raw = llm.chat_json(messages, temperature=temperature, max_tokens=max_tokens)
     return _json_loads_strict(raw)
 
-
 # ---------------------------
 # Public entry point
 # ---------------------------
-
 
 def synthesize_answer(
     query: str,
