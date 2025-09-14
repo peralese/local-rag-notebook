@@ -1,108 +1,118 @@
 # local-rag-notebook
-Local, **LLM-optional** “NotebookLM-style” search and Q&A over your own documents.
-
-This repo now includes **Phase 1 / 1.1 / 1.2** upgrades:
-- Hybrid retrieval **+ reranker** (config-toggable).
-- **Eval harness** with `gold.jsonl` (Recall@K, MRR@K, latency).
-- **Answer length controls** (`--max-ans-chars`, headings on/off, de-hyphenation).
-- **File outputs** (JSON/Markdown/TXT/HTML) via `--out` / `--save` / `--format`.
-- Small fixes (heading path rendering, page-range filter for debugging).
-- **Phase 2 warm-up and keep-alive support** for Ollama (avoids cold-start timeouts).
-- **DX improvements (Sept 2025):** Makefile, `pyproject.toml`, `requirements-dev.txt`, `.env.example`, and a test scaffold for smoother development.
+Local, **LLM‑optional** “NotebookLM‑style” search & Q&A over your own documents. Offline‑first retrieval with optional local LLM synthesis via **Ollama**.
 
 ---
 
-## ✨ Features (current)
-- **Offline-first.** No external APIs required (LLM synthesis optional & off by default).
-- **Hybrid retrieval**: BM25 (lexical) + dense embeddings → **RRF** fusion + **neighbor expansion**.
-- **Optional reranker**: cross-encoder boosts precision on the top candidates.
-- **Extractive answers**: concatenated, normalized snippets with **(File, Heading, Page)** citations.
-- **PDF normalization**: de-hyphenation, bullet cleanup.
-- **Table-aware (MVP)**: CSV/TSV rows rendered as key:value lines for strong lexical matches.
-- **Target by file** with `--files` (substring match).
-- **LLM warm-up**: on first `query` run, a lightweight warm-up call is made to pre-load the Ollama model.
-- **Keep-alive flag**: models stay loaded on the Ollama server (`--keep-alive 30m`) so subsequent queries are fast.
-- **DX tooling**: `make env`, `make lint`, `make fmt`, `make test`, `make run`.
+## ✨ What’s included (current)
+- **Hybrid retrieval**: BM25 (lexical) + dense embeddings → **RRF fusion** + **neighbor expansion**.
+- **Optional reranker** (cross‑encoder) to boost precision on the top candidates.
+- **Extractive answers with citations**: stitched snippets with **(File, Heading, Page)** references.
+- **PDF/MD/TXT/CSV/TSV ingestion** with text normalization (de‑hyphenation, bullets).
+- **Outputs** to JSON / Markdown / TXT / HTML (`--out` / `--save` / `--format`).
+- **Warm‑up + keep‑alive for Ollama** to avoid model cold starts.
+- **DX tooling**: Makefile targets, dev deps, lint/format/test config, and a smoke test.
 
 ---
 
 ## 📦 Requirements
-- Python **3.11+** recommended (works on **Windows + Python 3.13** with minor notes).
+- Python **3.10+** (tested on Windows w/ **3.13** and WSL).
 - No GPU required.
-- Disk: a few hundred MB for embeddings & indexes at small scale.
+- A few hundred MB of disk for small corpora indexes.
 
-**Runtime deps (core)**: `sentence-transformers`, `rank-bm25`, `numpy`, `pypdf`, `pyyaml`, `tqdm`, `pydantic`, `requests`
-
-**Dev deps (new)**: `ruff`, `black`, `isort`, `pytest`, `python-dotenv`
+**Core deps** (runtime): `sentence-transformers`, `rank-bm25`, `numpy`, `pypdf`, `pyyaml`, `tqdm`, `pydantic`, `requests`  
+**Dev deps**: `ruff`, `black`, `isort`, `pytest`, `python-dotenv`
 
 ---
 
-## 🚀 Install & Ingest
+## 🚀 Quickstart
 ```powershell
 # 1) Create and activate a venv
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1  # (macOS/Linux: source .venv/bin/activate)
+.\.venv\Scripts\Activate.ps1   # (macOS/Linux: source .venv/bin/activate)
 
 # 2) Install runtime + dev deps
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 
-# 3) Put docs in ./data  (PDF / MD / TXT / CSV / TSV)
-# 4) Build indexes
+# 3) Put your docs under ./data  (PDF / MD / TXT / CSV / TSV)
+
+# 4) Build the index
 python cli.py ingest .\data
 ```
 
 ---
 
 ## 🔎 Query (CLI)
-Now supports **new retrieval/rerank controls** (added recently) **plus warm-up/keep-alive**:
-- `--recall-topk N` — control the number of passages recalled before rerank.
-- `--rerank-topk N` — control the number of passages kept after rerank.
-- `--min-rerank-score F` — set a cutoff score; passages below are dropped unless fallback triggers.
-- `--no-rerank` — bypass reranker entirely, using recall only (debug/fallback).
-- `--neighbor-window N` — include ±N neighboring chunks around each selected passage for context stitching.
-- `--allow-remote` — override offline guard to allow non-local endpoints.
-- `--keep-alive DURATION` — keep the Ollama model in memory (default `30m`; supports `m`/`h` values).
-
-### Warm-up behavior
-- On the first `query` run, `cli.py` automatically sends a small `"warmup"` prompt to Ollama.
-- Combined with `--keep-alive`, this ensures large models (e.g., `llama3.1:8b`) don’t unload between queries.
-
-### Examples
-Example (bypass reranker, recall 12 passages, keep 6 contexts):
 ```powershell
-python cli.py query "Provide an overview of the exam" `
-  --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435 `
-  --recall-topk 12 --no-rerank --k 6 --show-contexts --keep-alive 2h
-```
-
-Example (rerank with threshold and fallback):
-```powershell
-python cli.py query "Provide an overview of the exam" `
-  --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435 `
-  --recall-topk 12 --rerank-topk 12 --min-rerank-score 0.15 --k 6 --show-contexts
-```
-
-Other basics:
-```powershell
-# Basic
+# Retrieval only (fast, offline by default)
 python cli.py query "List the prerequisites"
 
-# Target a file
-python cli.py query "Provide an overview of the exam" --files "AWS-Certified-Machine-Learning-Engineer-Associate_Exam-Guide.pdf"
+# Target specific files
+python cli.py query "Provide an overview of the exam" --files "AWS-*.pdf"
 
-# Show final contexts used
+# Show the stitched contexts used
 python cli.py query "What are study domains" --show-contexts
 
-# Increase answer size
-python cli.py query "Provide an overview of the exam" --max-ans-chars 2200
-
-# Debug by page window
-python cli.py query "Provide an overview of the exam" --pages 16-20
+# Save answer to file (HTML)
+python cli.py query "What are study domains" --save outputs --format html --quiet
 ```
 
-### Save to file
+### Synthesis with a local LLM (Ollama)
+```powershell
+# Example using WSL-forwarded Ollama on 11435
+python cli.py query "hello world" `
+  --synthesize --backend ollama --model llama3.1:8b `
+  --endpoint http://localhost:11435 `
+  --keep-alive 2h --show-contexts
+```
+
+**New/updated flags**
+- `--no-warmup` — skip the Ollama warmup even when `--synthesize` is used.
+- `--endpoint` — endpoint precedence is now **CLI `--endpoint` > `OLLAMA_HOST` env > `http://localhost:11434`**.
+- `-v/--verbose`, `-q/--quiet` — control log verbosity (logs go to **stderr**).
+- `--log-json` — print one JSON log object per line to **stderr** (great for debugging).
+
+**Retrieval/rerank controls** (if present in your build):
+- `--recall-topk N`, `--rerank-topk N`, `--min-rerank-score F`, `--no-rerank`  
+- `--neighbor-window N`, `--max-context-chars N`, `--cite-n N`, `--strict-citations`
+
+**Offline guard**
+- By default the tool is offline‑first. Non‑localhost endpoints are rejected unless you pass `--allow-remote`.
+
+---
+
+## 🔥 Warm‑up behavior (Ollama)
+- On `query` with `--synthesize --backend ollama`, the CLI sends a tiny **“ping”** to **preload the model**.
+- Endpoint resolution: **`--endpoint` > `OLLAMA_HOST` > `http://localhost:11434`**.
+- If Ollama isn’t reachable you’ll see a friendly warning, e.g.  
+  `warmup skipped: cannot reach Ollama at http://localhost:11435 (ConnectionError)` — the program continues.
+- Skip warmup with `--no-warmup`.
+
+**Examples**
+```powershell
+# Use env endpoint
+$env:OLLAMA_HOST = "http://localhost:11435"
+python cli.py query "hello world" --synthesize --backend ollama --model llama3.1:8b
+
+# Force a specific endpoint (overrides env)
+python cli.py query "hello world" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435
+
+# Skip model preload
+python cli.py query "hello world" --synthesize --backend ollama --model llama3.1:8b --no-warmup
+```
+
+---
+
+## 🪟 Windows + WSL notes
+- Start Ollama **inside WSL**: `ollama serve` (listens on `http://localhost:11434` inside WSL).  
+- If you run the CLI from **Windows**, forward a port to WSL (e.g., `11435 → 11434`) and then either:
+  - set `OLLAMA_HOST=http://localhost:11435`, or
+  - pass `--endpoint http://localhost:11435`.
+
+---
+
+## 💾 Saving outputs
 ```powershell
 # Auto-named under outputs/, HTML
 python cli.py query "What are study domains" --save outputs --format html --quiet
@@ -113,72 +123,85 @@ python cli.py query "List the prerequisites" --out outputs/prereqs.md
 
 ---
 
-## ⚙️ Configuration (`config.yaml`)
-*(unchanged — see existing doc)*
+## ⚙️ Configuration
+- `config.yaml` contains retrieval/synthesis defaults used by the app.
+- The CLI also reads **environment variables** (via `.env` if present).
 
----
+### Environment variables (extend `.env.example`)
+```env
+# Ollama endpoint (used if --endpoint is not provided)
+OLLAMA_HOST=http://localhost:11435
 
-## 🧪 Evaluation (Phase 1)
-*(unchanged — see existing doc)*
+# Optional: tune HTTP client timeouts (seconds)
+# Defaults: 10s connect, 600s read
+OLLAMA_CONNECT_TIMEOUT=10
+OLLAMA_READ_TIMEOUT=600
 
----
+# Optional: cap generation length when max_tokens isn't set by the caller
+# (helps keep latency reasonable on CPU models)
+OLLAMA_NUM_PREDICT=512
 
-## 📤 Outputs (Phase 1.2)
-*(unchanged — see existing doc)*
-
----
-
-## 📈 Performance notes
-- First query on a model can take 60–90s due to **cold load**. Warm-up + `--keep-alive` prevents this.
-- Default reranker `BAAI/bge-reranker-base` is accurate but **heavy on CPU** (10–20s).  
-  Switch to `cross-encoder/ms-marco-MiniLM-L-6-v2` for lighter CPU use.
-- Tune `top_k_lexical` / `top_k_dense` (30–40) for latency vs coverage.
-
----
-
-## 🧯 Troubleshooting
-*(unchanged — see existing doc)*
-
----
-
-## 🧹 Maintenance scripts
-*(unchanged — see existing doc)*
-
----
-
-## 🛠️ Developer Experience (new)
-We’ve added tooling for easier development:
-
-- **Makefile**  
-  - `make env` — create venv + install runtime + dev deps  
-  - `make lint` — run ruff  
-  - `make fmt` — run black + isort  
-  - `make test` — run pytest  
-  - `make run ARGS='query "hello" ...'` — pass args to CLI  
-  - `make clean` — remove caches  
-
-- **pyproject.toml** — config for ruff, black, isort, pytest, coverage.  
-- **requirements-dev.txt** — pins dev tools.  
-- **.env.example** — documents environment variables (`OLLAMA_HOST`, `OLLAMA_MODEL`, etc.).  
-- **tests/** — includes a basic smoke test to validate imports.  
-
-### Developer workflow
-```powershell
-make env
-make lint
-make fmt
-make test
-make run ARGS='query "hello" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435'
+# App logging defaults (can be overridden by CLI -v/-q/--log-json)
+LOG_LEVEL=INFO
 ```
 
 ---
 
-## 🧭 Roadmap
-- **Phase 2** – Grounded **LLM synthesis** (citation-faithful, with **abstain**).
-- **Phase 2.1 (added)** – Warm-up and keep-alive support for Ollama models (done ✅).
-- **Phase 3** – Table-aware extraction.
-- **Phase 4** – Corpus management & incremental indexing.
-- **Phase 5** – Perf pass: ANN (`hnswlib`), caching, concurrency.
+## 🧪 Evaluation (Phase 1)
+- Eval harness accepts a `gold.jsonl` and reports Recall@K, MRR@K, and latency.
+- Use it to tune `recall-topk`, reranker cutoff, and neighbor window size.
+
+---
+
+## 📈 Performance notes
+- First query on a model can take 30–90s due to **cold load**. Use warm‑up + `--keep-alive` to avoid this.
+- Default reranker (e.g., `BAAI/bge-reranker-base`) is accurate but **CPU‑heavy**; try `cross-encoder/ms-marco-MiniLM-L-6-v2` for lighter runs.
+- Tune `top_k_lexical` / `top_k_dense` (≈30–40) for latency vs coverage. Consider smaller models (e.g., `llama3.1:3b`) for faster synthesis.
+
+---
+
+## 🧯 Troubleshooting
+**“warmup skipped: cannot reach Ollama …”**  
+Ollama isn’t running or the endpoint is wrong. Start `ollama serve` in WSL and use `--endpoint` or `OLLAMA_HOST` to match your forwarded port.
+
+**Read timeout calling /api/chat**  
+On CPU and big models, long generations can exceed 120s. The client now defaults to a longer read timeout (600s), configurable via:
+- `OLLAMA_READ_TIMEOUT` — increase if you still see timeouts.
+- Consider a lighter model (`llama3.1:3b`) or cap generation via `OLLAMA_NUM_PREDICT` (e.g., `256`–`512`).
+
+**Pydantic / other imports missing**  
+Install deps in the *active* venv:  
+`python -m pip install -r requirements.txt -r requirements-dev.txt`
+
+**“make is not recognized” on Windows**  
+Either install it (`choco install make`) or run the equivalent raw commands shown in this README.
+
+---
+
+## 🛠️ Developer experience
+**Makefile targets**
+```bash
+make env     # create .venv, install runtime + dev deps
+make lint    # ruff
+make fmt     # isort + black
+make test    # pytest -q
+make run ARGS='query "hello" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435'
+make clean   # remove caches
+```
+
+**Project config**
+- `pyproject.toml` configures ruff, black, isort, pytest, coverage.
+- `requirements-dev.txt` pins dev tools.
+- `.env.example` documents `OLLAMA_HOST`, timeouts, and logging defaults.
+- `tests/` includes a smoke test to validate imports.
+
+---
+
+## 🧭 Roadmap (high‑level)
+- **Phase 2** – Grounded LLM synthesis (citation‑faithful) + **abstain** on low support.
+- **Phase 3** – Better table extraction.
+- **Phase 4** – Corpus mgmt & incremental indexing.
+- **Phase 5** – Perf: ANN (`hnswlib`), caching, concurrency.
 - **Phase 6** – Minimal local UI.
 - **Phase 7** – Packaging/DX improvements.
 
