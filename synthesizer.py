@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Iterable
 
 from llm.factory import make_llm  # requires llm/base.py, llm/ollama.py, llm/factory.py
 
@@ -26,20 +26,15 @@ SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 _BOM_RE = re.compile(r"^\ufeff")
 
+
 def _extract_first_json_object(text: str) -> Dict[str, Any]:
     """
     Robustly extract the first top-level JSON object from a string.
-    Tolerates:
-      - Markdown code fences ```json ... ```
-      - Leading/trailing noise before/after the JSON object
-      - Byte Order Mark
-    Raises:
-      ValueError if no well-formed object can be found.
+    Tolerates markdown fences, BOM, and trailing/leading noise.
     """
     if not isinstance(text, str):
         raise ValueError("Model output is not a string")
 
-    # Remove BOM and code fences; keep the rest intact so brace scan still works
     cleaned = _BOM_RE.sub("", text)
     cleaned = _CODE_FENCE_RE.sub("", cleaned)
 
@@ -52,7 +47,6 @@ def _extract_first_json_object(text: str) -> Dict[str, Any]:
     in_str = False
     for i in range(start, len(cleaned)):
         ch = cleaned[i]
-        # track quoted strings to avoid counting braces inside strings
         if ch == "\\" and in_str:
             esc = not esc
             continue
@@ -68,47 +62,104 @@ def _extract_first_json_object(text: str) -> Dict[str, Any]:
             depth -= 1
             if depth == 0:
                 candidate = cleaned[start : i + 1]
-                try:
-                    return json.loads(candidate)
-                except Exception as e:
-                    raise ValueError(f"JSON parse failed: {e}") from e
+                return json.loads(candidate)
 
     raise ValueError("Unbalanced JSON braces in model output.")
 
+
 def _json_loads_strict(txt: str) -> Dict[str, Any]:
     """
-    Parse STRICT JSON. If the entire string isn't valid JSON, attempt to locate
-    the first complete JSON object within and parse that.
+    Parse STRICT JSON. If full-string parse fails, locate the first full object.
     """
     try:
         return json.loads(_CODE_FENCE_RE.sub("", _BOM_RE.sub("", txt)))
     except Exception:
         return _extract_first_json_object(txt)
 
-def pack_context(chunks: List[Dict[str, Any]], max_chars: int = 24_000) -> List[Dict[str, str]]:
+
+# -------- New: diversity + near-dup helpers --------
+_WORD_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def _tokens(s: str) -> List[str]:
+    return _WORD_RE.findall((s or "").lower())
+
+
+def _jaccard(a: Iterable[str], b: Iterable[str]) -> float:
+    A, B = set(a), set(b)
+    if not A and not B:
+        return 1.0
+    if not A or not B:
+        return 0.0
+    inter = len(A & B)
+    union = len(A | B)
+    return inter / union if union else 0.0
+
+
+def pack_context(
+    chunks: List[Dict[str, Any]],
+    max_chars: int = 24_000,
+    per_source_quota: int = 3,
+    near_dup_jaccard: float = 0.90,
+    compare_last_n: int = 3,
+) -> List[Dict[str, str]]:
     """
-    Packs retrieved chunks into a compact list for prompting.
+    Pack retrieved chunks into a compact list for prompting with:
+      - Source diversity via per_source_quota (limit per file/title)
+      - Near-duplicate filtering using Jaccard token overlap
+      - Character budget (max_chars)
+
     Each packed item gets an ID C1, C2, ...
-    Expected chunk keys (best effort): text, title/file_name, path/uri/source.
+    Input chunk keys (best effort): text, title/file_name, path/uri/source.
     """
     out: List[Dict[str, str]] = []
     used = 0
+    per_src_count: dict[str, int] = {}
+    kept_token_history: List[List[str]] = []  # parallel to 'out', token lists for last-N compare
+
+    def _src_key(ch: Dict[str, Any]) -> str:
+        return (ch.get("path") or ch.get("uri") or ch.get("source") or ch.get("title") or "").lower()
+
     for i, ch in enumerate(chunks, start=1):
         text = (ch.get("text") or ch.get("content") or "").strip()
         if not text:
             continue
-        item = {
-            "id": f"C{i}",
-            "title": ch.get("title") or ch.get("file_name") or f"Source {i}",
-            "uri_or_path": ch.get("path") or ch.get("uri") or ch.get("source") or "",
-            "text": text,
-        }
+
+        src = _src_key(ch)
+        cnt = per_src_count.get(src, 0)
+        if per_source_quota > 0 and cnt >= per_source_quota:
+            # already have enough from this source; skip to diversify
+            continue
+
+        toks = _tokens(text)
+        # Compare to the last-N kept chunks (cheap dedup)
+        is_dup = False
+        if near_dup_jaccard is not None and near_dup_jaccard > 0 and kept_token_history:
+            for past in kept_token_history[-compare_last_n:] if compare_last_n > 0 else kept_token_history:
+                if _jaccard(toks, past) >= near_dup_jaccard:
+                    is_dup = True
+                    break
+        if is_dup:
+            continue
+
+        # budget check
         add = len(text)
         if used and used + add > max_chars:
             break
+
+        item = {
+            "id": f"C{len(out) + 1}",
+            "title": ch.get("title") or ch.get("file_name") or ch.get("source") or f"Source {i}",
+            "uri_or_path": ch.get("path") or ch.get("uri") or ch.get("source") or "",
+            "text": text,
+        }
         out.append(item)
+        kept_token_history.append(toks)
+        per_src_count[src] = cnt + 1
         used += add
+
     return out
+
 
 def build_messages(query: str, packed: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
@@ -143,8 +194,10 @@ RESPONSE JSON SCHEMA:
         {"role": "user", "content": user},
     ]
 
+
 def _sentences(text: str) -> List[str]:
     return [s.strip() for s in SENT_SPLIT_RE.split(text or "") if s and s.strip()]
+
 
 def validate_citations(parsed: Dict[str, Any], strict: bool) -> Tuple[bool, str]:
     """
@@ -170,6 +223,7 @@ def validate_citations(parsed: Dict[str, Any], strict: bool) -> Tuple[bool, str]
                 return False, f"strict mode: sentence lacks citation tag: '{preview}'"
     return True, ""
 
+
 def decide_abstain(parsed: Dict[str, Any], avg_sim: float, threshold: float) -> Tuple[bool, str]:
     cov = float(parsed.get("support_coverage") or 0.0)
     blended = 0.5 * cov + 0.5 * max(0.0, min(1.0, float(avg_sim or 0.0)))
@@ -178,6 +232,7 @@ def decide_abstain(parsed: Dict[str, Any], avg_sim: float, threshold: float) -> 
     if parsed.get("abstain", False):
         return True, parsed.get("why", "model abstained")
     return False, ""
+
 
 def _call_local_llm(
     messages: List[Dict[str, str]],
@@ -193,6 +248,7 @@ def _call_local_llm(
     llm = make_llm(backend=backend, model=model, endpoint=endpoint, offline=True)
     raw = llm.chat_json(messages, temperature=temperature, max_tokens=max_tokens)
     return _json_loads_strict(raw)
+
 
 # ---------------------------
 # Public entry point
@@ -226,7 +282,14 @@ def synthesize_answer(
           "snippets": [{"id":"C1","title":"...","uri_or_path":"...","text":"..."}]
         }
     """
-    packed = pack_context(retrieved, max_chars=max_context_chars)
+    # New packing behavior provides diversity + near-dup filtering
+    packed = pack_context(
+        retrieved,
+        max_chars=max_context_chars,
+        per_source_quota=3,
+        near_dup_jaccard=0.90,
+        compare_last_n=3,
+    )
     if not packed:
         return {"abstain": True, "why": "no usable context provided", "snippets": []}
 
@@ -262,3 +325,4 @@ def synthesize_answer(
         "answer_markdown": parsed.get("answer_markdown", "").strip(),
         "citations": parsed.get("citations", []),
     }
+
