@@ -144,6 +144,11 @@ OLLAMA_NUM_PREDICT=512
 # App logging defaults (can be overridden by CLI -v/-q/--log-json)
 LOG_LEVEL=INFO
 ```
+## 🧪 Testing (Phase 2 core)
+```bash
+make test
+# or
+pytest -q
 
 ---
 

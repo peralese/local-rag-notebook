@@ -1,69 +1,29 @@
-# Makefile for local-rag-notebook
-# Usage examples:
-#  - make env
-#  - make fmt
-#  - make lint
-#  - make test
-#  - make run ARGS='query "hello" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435'
+.PHONY: env fmt lint test run clean
 
-SHELL := /bin/sh
-VENV := .venv
+PY = python
+PIP = python -m pip
 
-# OS-aware Python path inside venv
-ifeq ($(OS),Windows_NT)
-PY := $(VENV)/Scripts/python.exe
-PIP := $(PY) -m pip
-ACTIVATE := .venv\Scripts\Activate.ps1
-NULL := nul
-else
-PY := $(VENV)/bin/python
-PIP := $(PY) -m pip
-ACTIVATE := . .venv/bin/activate
-NULL := /dev/null
-endif
-
-# Default target
-.PHONY: all
-all: env
-
-# Create virtual env and install deps (runtime + dev)
-.PHONY: env
 env:
-	python -m venv $(VENV)
-	$(PY) -m pip install --upgrade pip
-	@if [ -f requirements.txt ]; then \
-		echo "Installing runtime requirements..."; \
-		$(PIP) install -r requirements.txt; \
-	else \
-		echo "requirements.txt not found; skipping runtime deps"; \
-	fi
-	@echo "Installing dev requirements..."
+	$(PY) -m venv .venv
+	. .venv/Scripts/activate || . .venv/bin/activate; \
+	$(PIP) install --upgrade pip && \
+	$(PIP) install -r requirements.txt && \
 	$(PIP) install -r requirements-dev.txt
 
-# Run the CLI with ARGS='...'
-.PHONY: run
-run:
-	@echo "Running: cli.py $(ARGS)"
-	$(PY) cli.py $(ARGS)
-
-# Code quality
-.PHONY: fmt
 fmt:
-	$(PY) -m isort .
-	$(PY) -m black .
+	ruff check --fix .
+	isort .
+	black .
 
-.PHONY: lint
 lint:
-	$(PY) -m ruff check .
+	ruff check .
 
-.PHONY: test
 test:
-	$(PY) -m pytest -q
+	pytest -q
 
-# Remove caches (keeps venv)
-.PHONY: clean
+run:
+	$(PY) cli.py query "hello world" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435 --show-contexts
+
 clean:
-	@echo "Cleaning caches..."
-	@find . -type d -name "__pycache__" -prune -exec rm -rf {} + 2>$(NULL) || true
-	@rm -rf .pytest_cache 2>$(NULL) || true
-	@rm -rf .ruff_cache 2>$(NULL) || true
+	rm -rf .pytest_cache .ruff_cache .mypy_cache build dist *.egg-info
+
