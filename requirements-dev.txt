@@ -1,0 +1,6 @@
+ruff
+black
+isort
+pytest
+coverage
+python-dotenv

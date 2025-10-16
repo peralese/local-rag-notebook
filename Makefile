@@ -22,7 +22,8 @@ test:
 	pytest -q
 
 run:
-	$(PY) cli.py query "hello world" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435 --show-contexts
+	# Usage: make run ARGS='query "hello" --synthesize --backend ollama --model llama3.1:8b --endpoint http://localhost:11435 --show-contexts'
+	$(PY) cli.py $(ARGS)
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache build dist *.egg-info

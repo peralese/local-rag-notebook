@@ -8,6 +8,7 @@ import os
 import re
 
 import requests  # <-- added for warm-up HTTP call
+from llm.ollama import _timeouts as _ollama_timeouts  # align timeouts with Ollama client
 
 from local_rag_notebook.app import ingest_path, load_config, query_text
 from local_rag_notebook.logging_utils import setup_logging
@@ -233,7 +234,10 @@ def main():
                     "stream": False,
                     "keep_alive": args.keep_alive,
                 }
-                r = requests.post(f"{endpoint}/api/generate", json=warmup_payload, timeout=(10, 120))
+                # Use the same (connect, read) timeouts as the Ollama client
+                r = requests.post(
+                    f"{endpoint}/api/generate", json=warmup_payload, timeout=_ollama_timeouts()
+                )
                 if r.status_code >= 400:
                     logger.warning("warmup skipped: %s returned HTTP %s", f"{endpoint}/api/generate", r.status_code)
                 else:

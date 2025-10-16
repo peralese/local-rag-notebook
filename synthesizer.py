@@ -245,6 +245,7 @@ def _call_local_llm(
     """
     Calls the local LLM adapter and parses STRICT JSON from the response.
     """
+    # Build local LLM client and request STRICT-JSON response
     llm = make_llm(backend=backend, model=model, endpoint=endpoint, offline=True)
     raw = llm.chat_json(messages, temperature=temperature, max_tokens=max_tokens)
     return _json_loads_strict(raw)
@@ -294,7 +295,11 @@ def synthesize_answer(
         return {"abstain": True, "why": "no usable context provided", "snippets": []}
 
     messages = build_messages(query, packed)
-    parsed = _call_local_llm(messages, backend=backend, model=model, endpoint=endpoint)
+    try:
+        parsed = _call_local_llm(messages, backend=backend, model=model, endpoint=endpoint)
+    except Exception as e:
+        # Gracefully abstain on any local LLM connectivity/parse issues
+        return {"abstain": True, "why": f"LLM call failed: {e.__class__.__name__}: {e}", "snippets": packed[:3]}
 
     ok, reason = validate_citations(parsed, strict=strict_citations)
     if not ok:
