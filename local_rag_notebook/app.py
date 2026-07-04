@@ -211,28 +211,18 @@ def query_text(
         if rr.enabled and base_chunks:
             # candidates to rerank
             candidates = base_chunks[:rr_topk_to_rerank]
-            # Expect: (ranked_chunks, scores_map_or_list)
-            rer_chunks, scores_obj = rr.rerank(question, candidates, top_k=rr_topk_to_rerank)
+            # Each entry carries its own chunk AND its own score together, so
+            # there's no separate parallel list to zip (and possibly misalign).
+            reranked = rr.rerank(question, candidates, top_k=rr_topk_to_rerank)
+            rer_chunks = [rc.chunk for rc in reranked]
 
-            # Apply score cutoff if we can read scores
             if rer_chunks:
-                filtered: List[Chunk] = []
-                if scores_obj:
-                    # scores may be a dict keyed by chunk_id, or a list aligned with rer_chunks
-                    if isinstance(scores_obj, dict):
-                        for ch in rer_chunks:
-                            sc = float(scores_obj.get(ch.chunk_id, 0.0))
-                            if sc >= rr_min_score:
-                                filtered.append(ch)
-                    elif isinstance(scores_obj, list):
-                        for ch, sc in zip(rer_chunks, scores_obj):
-                            if float(sc) >= rr_min_score:
-                                filtered.append(ch)
-                    else:
-                        # unknown structure; skip thresholding
-                        filtered = rer_chunks
-                else:
-                    filtered = rer_chunks
+                # score is None for candidates that weren't actually scored
+                # (reranker unavailable, or beyond top_k) — pass those through
+                # rather than filtering them on a score that doesn't exist.
+                filtered: List[Chunk] = [
+                    rc.chunk for rc in reranked if rc.score is None or rc.score >= rr_min_score
+                ]
 
                 chunks = filtered[:rr_final_k] if filtered else rer_chunks[:rr_final_k]
                 reranked_ids = [c.chunk_id for c in rer_chunks[:rr_topk_to_rerank]]

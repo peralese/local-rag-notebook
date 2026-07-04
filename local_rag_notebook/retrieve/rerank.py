@@ -1,8 +1,19 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional
 
 from ..index.schema import Chunk
+
+
+@dataclass
+class RerankedChunk:
+    """A chunk paired with its own rerank score at all times — never two
+    separately-ordered lists that a caller has to zip together by position."""
+
+    chunk: Chunk
+    score: Optional[float]  # None when this chunk wasn't actually scored
+    # (reranker disabled/unavailable, or beyond the top_k that got reranked)
 
 
 class Reranker:
@@ -30,18 +41,25 @@ class Reranker:
         if self._model is None:
             self._model = self._CrossEncoder(self.model_name)
 
-    def rerank(
-        self, query: str, chunks: List[Chunk], top_k: int
-    ) -> Tuple[List[Chunk], Optional[List[float]]]:
+    def rerank(self, query: str, chunks: List[Chunk], top_k: int) -> List[RerankedChunk]:
         if not self.enabled or not chunks:
-            return chunks, None
+            return [RerankedChunk(chunk=c, score=None) for c in chunks]
         self._ensure_model()
         pairs = [(query, c.text) for c in chunks[:top_k]]
         try:
             scores = self._model.predict(pairs)  # higher is better
         except Exception:
-            return chunks, None
-        scored = list(zip(chunks[:top_k], scores))
-        scored.sort(key=lambda x: float(x[1]), reverse=True)
-        sorted_chunks = [c for c, s in scored] + chunks[top_k:]
-        return sorted_chunks, [float(s) for s in scores]
+            return [RerankedChunk(chunk=c, score=None) for c in chunks]
+
+        # Build (chunk, score) pairs and sort THAT — score and chunk move
+        # together, so there is no separate list that can drift out of sync.
+        scored = sorted(
+            zip(chunks[:top_k], (float(s) for s in scores)),
+            key=lambda pair: pair[1],
+            reverse=True,
+        )
+        reranked = [RerankedChunk(chunk=c, score=s) for c, s in scored]
+        # Candidates beyond top_k were never scored; pass them through
+        # untouched rather than silently dropping them.
+        reranked.extend(RerankedChunk(chunk=c, score=None) for c in chunks[top_k:])
+        return reranked
