@@ -1,20 +1,17 @@
-import re
 from typing import Dict, List
 
 from ..index.schema import Chunk
 
 
 def _simple_tokenize(t: str) -> list[str]:
-    return re.findall(r"\w+|\S", t)
+    # Split on whitespace only, so punctuation stays glued to its word (e.g.
+    # "1.1", "non-validated", "CI/CD" each stay one token). This makes the
+    # join in _detok lossless instead of needing punctuation-spacing patches.
+    return t.split()
 
 
 def _detok(tokens: list[str]) -> str:
-    # Simple detokenizer: join with spaces, then compact spaces before punctuation
-    s = " ".join(tokens)
-    s = re.sub(r"\s+([,.;:!?])", r"\1", s)
-    s = re.sub(r"\(\s+", "(", s)
-    s = re.sub(r"\s+\)", ")", s)
-    return s
+    return " ".join(tokens)
 
 
 def chunk_sections(section: Dict, window_tokens: int, overlap_tokens: int) -> List[Chunk]:
@@ -41,6 +38,14 @@ def chunk_sections(section: Dict, window_tokens: int, overlap_tokens: int) -> Li
     )
 
     toks = _simple_tokenize(text)
+
+    # If the whole section already fits in a single window, a sliding-window
+    # sub-chunk would just be a near-duplicate of the section chunk above
+    # (same text, minus nothing). Skip it so retrieval/rerank/top-k aren't
+    # spent on redundant copies of the same page.
+    if len(toks) <= window_tokens:
+        return chunks
+
     stride = max(1, window_tokens - overlap_tokens)
     idx = 0
     order = 1

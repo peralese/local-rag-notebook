@@ -1,7 +1,7 @@
 import time
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 
@@ -23,6 +23,26 @@ SUPPORTED = {".pdf", ".md", ".txt", ".csv", ".tsv"}
 def load_config(path: str | Path) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def build_contexts(
+    chunks: List[Chunk], score_map: Dict[str, float], top_k: int
+) -> List[dict]:
+    """
+    Build the response's `contexts` entries: full chunk text (no hidden
+    truncation — synthesis budgeting is owned by pack_context's max_chars)
+    plus a real per-chunk similarity score when one exists.
+    """
+    return [
+        {
+            "id": c.chunk_id,
+            "file": c.meta.get("file_path"),
+            "page": c.page_no,
+            "text": c.text,
+            "score": score_map.get(c.chunk_id),
+        }
+        for c in chunks[:top_k]
+    ]
 
 
 def ingest_path(data_dir: Path, cfg: dict):
@@ -149,6 +169,11 @@ def query_text(
     bm25_hits = lex.search(question, top_k=top_k_lex)
     dense_hits = dense.search(question, top_k=top_k_den)
     timers["recall_ms"] = int((time.perf_counter() - t1) * 1000)
+
+    # Real per-chunk retrieval confidence (cosine similarity from the dense
+    # index, already in [-1, 1]). Chunks pulled in only via neighbor expansion
+    # won't have an entry here, since they were never a direct dense hit.
+    dense_score_map = {h.chunk_id: h.score for h in dense_hits}
 
     # ---- RRF fuse
     t2 = time.perf_counter()
@@ -285,18 +310,6 @@ def query_text(
         "citations": citations,
         "trace": trace,
         # ALWAYS include contexts so the synthesizer has material
-        "contexts": [
-            {
-                "id": c.chunk_id,
-                "file": c.meta.get("file_path"),
-                "page": c.page_no,
-                "text": c.text[:1000],
-                # Make score numeric if available; otherwise omit or default
-                "score": (
-                    float(getattr(c, "score")) if getattr(c, "score", None) is not None else 0.7
-                ),
-            }
-            for c in chunks[:top_k]
-        ],
+        "contexts": build_contexts(chunks, dense_score_map, top_k),
     }
     return resp

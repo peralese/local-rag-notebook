@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+# NOTE: Not yet wired into the ingest pipeline (see local_rag_notebook/app.py
+# ingest_path, ingest/pdf.py, ingest/csv_tsv.py). These functions are exercised
+# directly by tests/test_table_csv.py and tests/test_table_tsv.py, but no
+# ingest code path currently imports or calls this module. Tracked as
+# Phase 3 in README.md.
+
 import csv
 from dataclasses import dataclass
 from pathlib import Path

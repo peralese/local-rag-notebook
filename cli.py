@@ -167,8 +167,13 @@ def main():
     p_q.add_argument(
         "--abstain-threshold",
         type=float,
-        default=0.70,
-        help="Min blended support to answer; else ABSTAIN (default: 0.70)",
+        default=0.55,
+        # Recalibrated after Bug B fix (avg_sim is now real MiniLM cosine
+        # similarity, not a dead 0.7 constant). Observed blended scores on
+        # correctly-answered, well-cited sample queries ranged ~0.61-0.80;
+        # a genuinely unsupported query scored ~0.03. 0.55 sits below the
+        # lowest good-case score with margin, well above the bad-case score.
+        help="Min blended support to answer; else ABSTAIN (default: 0.55)",
     )
     p_q.add_argument(
         "--cite-n",
@@ -327,7 +332,14 @@ def main():
 
             # Render into the same structure the rest of the CLI expects
             if synth.get("abstain"):
-                ans["answer"] = f"**ABSTAINED**: {synth.get('why', 'insufficient support')}"
+                abstain_reason = synth.get("abstain_reason", "insufficient_support")
+                ans["abstain_reason"] = abstain_reason
+                if abstain_reason == "llm_unreachable":
+                    # Backend error, not a grounding judgment — must read
+                    # differently from a genuine "insufficient support" abstain.
+                    ans["answer"] = f"**LLM UNAVAILABLE**: {synth.get('why', 'could not reach the local LLM backend')}"
+                else:
+                    ans["answer"] = f"**ABSTAINED**: {synth.get('why', 'insufficient support')}"
                 # Show top snippets as pseudo-citations so printing doesn't break
                 snips = synth.get("snippets", []) or []
                 ans["citations"] = [

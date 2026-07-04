@@ -265,7 +265,9 @@ def synthesize_answer(
     endpoint: str = "http://localhost:11434",
     max_context_chars: int = 24_000,
     cite_n: int = 3,
-    abstain_threshold: float = 0.70,
+    # See cli.py's --abstain-threshold for the calibration rationale (avg_sim
+    # is now real cosine similarity, not the old dead 0.7 constant).
+    abstain_threshold: float = 0.55,
     strict_citations: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -292,19 +294,32 @@ def synthesize_answer(
         compare_last_n=3,
     )
     if not packed:
-        return {"abstain": True, "why": "no usable context provided", "snippets": []}
+        return {
+            "abstain": True,
+            "abstain_reason": "no_context",
+            "why": "no usable context provided",
+            "snippets": [],
+        }
 
     messages = build_messages(query, packed)
     try:
         parsed = _call_local_llm(messages, backend=backend, model=model, endpoint=endpoint)
     except Exception as e:
-        # Gracefully abstain on any local LLM connectivity/parse issues
-        return {"abstain": True, "why": f"LLM call failed: {e.__class__.__name__}: {e}", "snippets": packed[:3]}
+        # The backend was unreachable, timed out, or returned something we
+        # couldn't parse as JSON — this is NOT a grounding judgment, so it must
+        # be distinguishable from "the LLM ran and found insufficient support".
+        return {
+            "abstain": True,
+            "abstain_reason": "llm_unreachable",
+            "why": f"LLM call failed: {e.__class__.__name__}: {e}",
+            "snippets": packed[:3],
+        }
 
     ok, reason = validate_citations(parsed, strict=strict_citations)
     if not ok:
         return {
             "abstain": True,
+            "abstain_reason": "citation_invalid",
             "why": f"citation validation failed: {reason}",
             "snippets": packed[:3],
         }
@@ -323,7 +338,15 @@ def synthesize_answer(
 
     do_abstain, why = decide_abstain(parsed, avg_sim=avg_sim, threshold=abstain_threshold)
     if do_abstain:
-        return {"abstain": True, "why": why or parsed.get("why", ""), "snippets": packed[:3]}
+        # The LLM ran successfully; it (or the blended score) judged the
+        # retrieved context insufficient to answer. Distinct from the backend
+        # actually failing (see "llm_unreachable" above).
+        return {
+            "abstain": True,
+            "abstain_reason": "insufficient_support",
+            "why": why or parsed.get("why", ""),
+            "snippets": packed[:3],
+        }
 
     return {
         "abstain": False,

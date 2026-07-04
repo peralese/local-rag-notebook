@@ -150,6 +150,7 @@ def write_output(
         "citations": payload.get("citations"),
         "trace": payload.get("trace"),
         "contexts": payload.get("contexts"),
+        "abstain_reason": payload.get("abstain_reason"),
     }
     if fmt2 == "json":
         target.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")

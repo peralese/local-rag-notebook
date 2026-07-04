@@ -7,7 +7,7 @@ Local, **LLM‑optional** “NotebookLM‑style” search & Q&A over your own do
 - **Hybrid retrieval**: BM25 (lexical) + dense embeddings → **RRF fusion** + **neighbor expansion**.
 - **Optional reranker** (cross‑encoder) to boost precision on the top candidates.
 - **Extractive answers with citations**: stitched snippets with **(File, Heading, Page)** references.
-- **PDF/MD/TXT/CSV/TSV ingestion** with text normalization (de‑hyphenation, bullets).
+- **PDF/MD/TXT/CSV/TSV ingestion** with text normalization (de‑hyphenation, bullets). ⚠️ Tables embedded in PDFs are **not** structurally extracted during ingestion — PDF pages are ingested as plain text (via `pypdf`), so a table's row/column layout is not preserved. A tested table-extraction utility exists (`local_rag_notebook/table.py`, using `pdfplumber`) but is **not yet wired into the ingest pipeline** — see Roadmap.
 - **Outputs** to JSON / Markdown / TXT / HTML (`--out` / `--save` / `--format`).
 - **Warm‑up + keep‑alive for Ollama** to avoid model cold starts.
 - **DX tooling**: Makefile targets, dev deps, lint/format/test config, and a smoke test.
@@ -20,6 +20,7 @@ Local, **LLM‑optional** “NotebookLM‑style” search & Q&A over your own do
 - A few hundred MB of disk for small corpora indexes.
 
 **Core deps** (runtime): `sentence-transformers`, `rank-bm25`, `numpy`, `pypdf`, `pyyaml`, `tqdm`, `pydantic`, `requests`  
+**Also installed but not yet used by ingest**: `pdfplumber` — only consumed by the standalone, unit-tested `local_rag_notebook/table.py` utility, which the ingest pipeline does not call today.
 **Dev deps**: `ruff`, `black`, `isort`, `pytest`, `python-dotenv`
 
 ---
@@ -204,7 +205,7 @@ make clean   # remove caches
 
 ## 🧭 Roadmap (high‑level)
 - **Phase 2** – Grounded LLM synthesis (citation‑faithful) + **abstain** on low support.
-- **Phase 3** – Better table extraction.
+- **Phase 3** – Wire `local_rag_notebook/table.py` (PDF/CSV/TSV table detection → markdown chunks) into the actual ingest pipeline. The module and its tests exist today, but ingest does not call it yet, so table structure in PDFs is currently lost (flattened to plain text).
 - **Phase 4** – Corpus mgmt & incremental indexing.
 - **Phase 5** – Perf: ANN (`hnswlib`), caching, concurrency.
 - **Phase 6** – Minimal local UI.
